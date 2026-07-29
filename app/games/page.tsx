@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Art } from "@/components/Art";
-import { PUBLISHED, type PublishedGame } from "@/lib/data";
+import { getShowcase } from "@/lib/sheet";
+import type { Game } from "@/lib/data";
 import { Icon } from "@/lib/icons";
 
 export const metadata: Metadata = {
@@ -16,25 +17,27 @@ const TAG_TONES = [
   "bg-brand/12 text-brand",
 ];
 
-/** Renders **bold** spans in the placeholder copy. */
-function RichText({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(/(\*\*[^*]+\*\*)/g).map((chunk, i) =>
-        chunk.startsWith("**") && chunk.endsWith("**") ? (
-          <b key={i} className="font-semibold text-white">
-            {chunk.slice(2, -2)}
-          </b>
-        ) : (
-          <span key={i}>{chunk}</span>
-        )
-      )}
-    </>
-  );
+/** "Coming soon" / "2026" all mean unreleased; a real date means it's out. */
+function isReleased(game: Game) {
+  const d = game.releaseDate.trim();
+  if (!d || /coming|tba|soon/i.test(d)) return false;
+  const parsed = Date.parse(d);
+  return Number.isNaN(parsed) ? false : parsed <= Date.now();
 }
 
-export default function GamesPage() {
-  const { featured, more } = PUBLISHED;
+function eyebrowFor(game: Game) {
+  return isReleased(game)
+    ? "Available now on Steam"
+    : `Coming ${game.releaseDate}`;
+}
+
+function ctaFor(game: Game) {
+  return isReleased(game) ? "Buy on Steam" : "Wishlist on Steam";
+}
+
+export default async function GamesPage() {
+  // Straight from the sheet: Status = Approved and Ours = Yes.
+  const { featured, more } = await getShowcase();
 
   return (
     <>
@@ -53,70 +56,89 @@ export default function GamesPage() {
         </div>
       </section>
 
-      {/* ---------------- Upcoming release ---------------- */}
-      <section className="pb-16">
-        <div className="mx-auto w-full max-w-[1180px] px-6">
-          {/* Heading follows the featured game — calling a shipped game
-              "upcoming" would just be wrong. */}
-          <h2 className="mb-9 text-center font-display text-[28px] font-extrabold text-brand">
-            {featured.released ? "Latest Release" : "Upcoming Release"}
-          </h2>
+      {/* ---------------- Featured ---------------- */}
+      {featured && (
+        <section className="pb-16">
+          <div className="mx-auto w-full max-w-[1180px] px-6">
+            {/* Heading follows the game — calling a shipped game "upcoming"
+                would just be wrong. */}
+            <h2 className="mb-9 text-center font-display text-[28px] font-extrabold text-brand">
+              {isReleased(featured) ? "Latest Release" : "Upcoming Release"}
+            </h2>
 
-          <div className="grid items-center overflow-hidden rounded-2xl border border-cyan/28 bg-card md:grid-cols-2">
-            {/* Natural capsule ratio — stretching it to fill a taller column
-                crops the artwork's title right off. */}
-            <Art
-              name={featured.name}
-              src={featured.capsule}
-              eager
-              className="self-center rounded-none"
-            />
-            <div className="self-center p-8 md:p-10">
-              <p
-                className={`mb-2.5 text-[13px] font-bold uppercase tracking-[0.07em] ${
-                  featured.released ? "text-brand" : "text-cyan"
-                }`}
-              >
-                {featured.eyebrow}
-              </p>
-              <h3 className="mb-2.5 text-[clamp(1.6rem,2.6vw,2.3rem)]">
-                {featured.name}
-              </h3>
-              <p className="mb-4 text-[14.5px] text-muted">
-                by {featured.studio}
-              </p>
-              <p className="mb-5 text-muted">
-                <RichText text={featured.desc} />
-              </p>
-              <TagRow tags={featured.tags} />
-              <a
-                href={featured.url}
-                className="btn btn-primary"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {featured.cta}
-                <Icon name="external" size={15} />
-              </a>
+            <div className="grid items-center overflow-hidden rounded-2xl border border-cyan/28 bg-card md:grid-cols-2">
+              {/* Natural capsule ratio — stretching it to fill a taller column
+                  crops the artwork's title right off. */}
+              <Art
+                name={featured.name}
+                src={featured.capsule}
+                eager
+                className="self-center rounded-none"
+              />
+              <div className="self-center p-8 md:p-10">
+                <p
+                  className={`mb-2.5 text-[13px] font-bold uppercase tracking-[0.07em] ${
+                    isReleased(featured) ? "text-brand" : "text-cyan"
+                  }`}
+                >
+                  {eyebrowFor(featured)}
+                </p>
+                <h3 className="mb-2.5 text-[clamp(1.6rem,2.6vw,2.3rem)]">
+                  {featured.name}
+                </h3>
+                <p className="mb-4 text-[14.5px] text-muted">
+                  by {featured.developer}
+                </p>
+                <p className="mb-5 text-muted">{featured.description}</p>
+                <TagRow tags={featured.genres} />
+                <a
+                  href={featured.steamUrl}
+                  className="btn btn-primary"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {ctaFor(featured)}
+                  <Icon name="external" size={15} />
+                </a>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      {/* ---------------- More games ---------------- */}
-      <section className="pb-16">
-        <div className="mx-auto w-full max-w-[1180px] px-6">
-          <h2 className="mb-9 text-center font-display text-[28px] font-extrabold text-purple">
-            More Games
-          </h2>
+      {/* ---------------- The rest ---------------- */}
+      {more.length > 0 && (
+        <section className="pb-16">
+          <div className="mx-auto w-full max-w-[1180px] px-6">
+            <h2 className="mb-9 text-center font-display text-[28px] font-extrabold text-purple">
+              More Games
+            </h2>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {more.map((game) => (
-              <GameCard key={game.name} game={game} />
-            ))}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {more.map((game) => (
+                <GameCard key={game.id} game={game} />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* Nothing marked "Ours" in the sheet yet. */}
+      {!featured && (
+        <section className="pb-16">
+          <div className="mx-auto w-full max-w-[1180px] px-6">
+            <div className="rounded-2xl border border-dashed border-line px-6 py-16 text-center">
+              <h2 className="mb-3 font-sans text-xl font-bold tracking-normal">
+                Nothing published here yet
+              </h2>
+              <p className="m-0 text-muted">
+                Titles appear once a row is marked <strong>Approved</strong> and{" "}
+                <strong>Ours</strong> in the submissions sheet.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ---------------- CTA ---------------- */}
       <section className="pb-20">
@@ -168,7 +190,9 @@ function TagRow({ tags }: { tags: string[] }) {
   );
 }
 
-function GameCard({ game }: { game: PublishedGame }) {
+function GameCard({ game }: { game: Game }) {
+  const released = isReleased(game);
+
   return (
     <article className="card flex flex-col overflow-hidden p-0">
       <Art name={game.name} src={game.capsule} className="rounded-none" />
@@ -176,25 +200,27 @@ function GameCard({ game }: { game: PublishedGame }) {
       <div className="flex flex-1 flex-col p-5">
         <p
           className={`mb-2.5 text-[13px] font-bold uppercase tracking-[0.07em] ${
-            game.released ? "text-brand" : "text-cyan"
+            released ? "text-brand" : "text-cyan"
           }`}
         >
-          {game.eyebrow}
+          {eyebrowFor(game)}
         </p>
         <h3 className="mb-1.5 text-[19px]">{game.name}</h3>
-        <p className="mb-3 text-sm text-muted">by {game.studio}</p>
-        <p className="clamp-3 mb-4 text-[14.5px] text-muted">{game.desc}</p>
+        <p className="mb-3 text-sm text-muted">by {game.developer}</p>
+        <p className="clamp-3 mb-4 text-[14.5px] text-muted">
+          {game.description}
+        </p>
 
         {/* Pinned to the bottom so CTAs line up across the grid. */}
         <div className="mt-auto">
-          <TagRow tags={game.tags} />
+          <TagRow tags={game.genres} />
           <a
-            href={game.url}
+            href={game.steamUrl}
             className="btn btn-primary w-full"
             target="_blank"
             rel="noopener noreferrer"
           >
-            {game.cta}
+            {ctaFor(game)}
             <Icon name="external" size={15} />
           </a>
         </div>

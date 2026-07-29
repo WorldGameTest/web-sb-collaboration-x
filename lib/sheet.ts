@@ -1,6 +1,7 @@
 import "server-only";
 import type { Game } from "./data";
 import { STEAM_GAMES } from "./games.generated";
+import { resolveCapsules } from "./steamCapsule";
 
 /**
  * Reads approved games out of the Google Sheet.
@@ -35,7 +36,15 @@ type SheetRow = {
   positive?: string;
   capsule?: string;
   description?: string;
+  /** "Yes" = show on the /games page as one of our published titles. */
+  ours?: string;
+  /** "Yes" = the single featured slot at the top of /games. */
+  featured?: string;
+  /** Submitter's email. Server-side only — never reaches the browser. */
+  ownerEmail?: string;
 };
+
+const isYes = (v?: string) => /^(yes|y|true|1|x)$/i.test(String(v ?? "").trim());
 
 const splitList = (v?: string) =>
   String(v ?? "")
@@ -43,11 +52,18 @@ const splitList = (v?: string) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-/** Legacy CDN path, used when the sheet has no capsule stored. */
-function capsuleFor(appid?: string | number, stored?: string) {
-  if (stored) return stored;
-  if (!appid) return undefined;
-  return `https://shared.akamai.steamstatic.com/steam/apps/${appid}/header.jpg`;
+/**
+ * Only ever use the capsule the sheet stored.
+ *
+ * Deriving one from the appid does NOT work: recent releases live at a
+ * content-hashed path that can't be guessed, so a constructed URL 404s and the
+ * card shows a broken image. Blank rows get filled in from the Steam API by
+ * resolveCapsules() below, and anything still missing falls through to the
+ * gradient placeholder.
+ */
+function storedCapsule(stored?: string) {
+  const url = stored?.trim();
+  return url && /^https?:\/\//.test(url) ? url : undefined;
 }
 
 /**
@@ -80,7 +96,7 @@ function toGame(row: SheetRow): Game | null {
   return {
     id: appid ? `s${appid}` : `row-${name.toLowerCase().replace(/\W+/g, "-")}`,
     appid: appid ? Number(appid) : undefined,
-    capsule: capsuleFor(appid, row.capsule),
+    capsule: storedCapsule(row.capsule),
     name,
     genres: genres.slice(0, 3),
     price: row.price?.trim() || "—",
@@ -104,6 +120,8 @@ function toGame(row: SheetRow): Game | null {
     steamUrl:
       row.steamLink?.trim() ||
       (appid ? `https://store.steampowered.com/app/${appid}/` : "#"),
+    ours: isYes(row.ours),
+    featured: isYes(row.featured),
   };
 }
 
@@ -145,6 +163,19 @@ export async function getApprovedGames(): Promise<Game[]> {
       .map(toGame)
       .filter((g): g is Game => g !== null);
 
+    // Backfill covers for rows the sheet has no capsule for — typically ones
+    // added by hand. Without this the card falls back to a gradient, which is
+    // tidy but not the real art.
+    const missing = games.filter((g) => !g.capsule && g.appid).map((g) => g.appid);
+    if (missing.length > 0) {
+      const resolved = await resolveCapsules(missing);
+      for (const game of games) {
+        if (!game.capsule && game.appid) {
+          game.capsule = resolved.get(String(game.appid));
+        }
+      }
+    }
+
     // An empty sheet is legitimate; a broken one is not. Only fall back on
     // failure, never on "no games approved yet".
     return games;
@@ -152,4 +183,63 @@ export async function getApprovedGames(): Promise<Game[]> {
     console.error("[sheet] Could not read approved games:", err);
     return STEAM_GAMES;
   }
+}
+
+/**
+ * Game id -> owner email, for the matching logic.
+ *
+ * Kept separate from getApprovedGames() on purpose: that result is handed to
+ * client components as props, so anything on it is shipped to the browser.
+ * Owner emails must never make that trip — a match is what unlocks contact.
+ */
+export async function getGameOwners(): Promise<Map<string, string>> {
+  const url = process.env.SHEETS_WEBHOOK_URL;
+  const secret = process.env.SHEETS_SECRET;
+  const owners = new Map<string, string>();
+  if (!url) return owners;
+
+  try {
+    const res = await fetch(
+      `${url}?action=games&secret=${encodeURIComponent(secret ?? "")}`,
+      { next: { tags: [GAMES_TAG], revalidate: REVALIDATE_SECONDS } }
+    );
+    if (!res.ok) return owners;
+
+    const payload = (await res.json()) as { ok?: boolean; games?: SheetRow[] };
+    if (payload.ok !== true || !Array.isArray(payload.games)) return owners;
+
+    for (const row of payload.games) {
+      const email = row.ownerEmail?.trim().toLowerCase();
+      const appid = row.steamAppId ? String(row.steamAppId) : "";
+      if (!email || !appid) continue;
+      owners.set(`s${appid}`, email);
+    }
+  } catch (err) {
+    console.error("[sheet] Could not read game owners:", err);
+  }
+
+  return owners;
+}
+
+/**
+ * Our own published titles — the /games page.
+ *
+ * Driven entirely by the sheet: a row needs Status = Approved and Ours = Yes.
+ * Mark exactly one row Featured = Yes for the big slot at the top; if none is
+ * marked, the first one is used so the page never loses its hero.
+ */
+export async function getShowcase(): Promise<{
+  featured: Game | null;
+  more: Game[];
+}> {
+  const approved = await getApprovedGames();
+  const ours = approved.filter((g) => g.ours);
+
+  if (ours.length === 0) return { featured: null, more: [] };
+
+  const featured = ours.find((g) => g.featured) ?? ours[0];
+  return {
+    featured,
+    more: ours.filter((g) => g.id !== featured.id),
+  };
 }

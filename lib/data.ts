@@ -38,6 +38,10 @@ export type Game = {
   tags: string[];
   description: string;
   steamUrl: string;
+  /** Sheet flag: one of our own published titles — shows on /games. */
+  ours?: boolean;
+  /** Sheet flag: the single featured slot at the top of /games. */
+  featured?: boolean;
 };
 
 export type GameStatus = "in_pool" | "in_review" | "refused";

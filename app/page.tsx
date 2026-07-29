@@ -48,17 +48,21 @@ export default async function HomePage() {
             </strong>
           </p>
 
-          {/* Stats */}
+          {/* Stats. The pool count is real — it's the approved rows in the
+              sheet, so it can never claim games that aren't live. */}
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-9 gap-y-5">
-            <Stat value={SITE_STATS.gamesInPool} label="games in the pool" />
+            <Stat value={pool.length} label="games in the pool" />
             <StatDivider />
             <Stat value={SITE_STATS.studiosSwiping} label="studios swiping" />
             <StatDivider />
             <Stat value={SITE_STATS.matchesMade} label="matches made" />
           </div>
 
-          {/* Recent matches */}
-          <p className="mt-9 text-base text-muted">Recent matches:</p>
+          {/* Recent matches — omitted entirely until there are pairs to show,
+              rather than leaving a heading over empty space. */}
+          {recentMatches.length > 0 && (
+            <p className="mt-9 text-base text-muted">Recent matches:</p>
+          )}
           <div className="mt-4 flex flex-wrap justify-center gap-5">
             {recentMatches.map(([a, b]) => (
               <div key={`${a.id}-${b.id}`} className="card p-3.5">
@@ -96,8 +100,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ---------------- Catalog ---------------- */}
-      <CatalogMarquee games={pool} />
+      {/* ---------------- Catalog ----------------
+          Skipped while the pool is empty — a heading over a blank strip reads
+          as a broken page, not as "no games yet". */}
+      {pool.length > 0 && <CatalogMarquee games={pool} />}
 
       {/* ---------------- Try the deck ---------------- */}
       <section className="py-16">
@@ -106,8 +112,9 @@ export default async function HomePage() {
             Try the deck
           </h2>
           <p className="mt-1 text-muted">
-            Drag the card left or right - exactly like members swipe the real
-            pool.
+            {pool.length > 0
+              ? "Drag the card left or right - exactly like members swipe the real pool."
+              : "This is how members swipe the pool."}
           </p>
 
           <SwipeDeck
@@ -117,14 +124,29 @@ export default async function HomePage() {
             emptyState={
               <div className="card p-14 text-center">
                 <h3 className="mb-2 text-xl tracking-normal">
-                  That&apos;s the demo
+                  {pool.length > 0
+                    ? "That's the demo"
+                    : "The pool is filling up"}
                 </h3>
                 <p className="mb-5 text-muted">
-                  The real pool has {SITE_STATS.gamesInPool} games in it, scored
-                  for how well they&apos;d sell next to yours.
+                  {pool.length > 0 ? (
+                    <>
+                      The real pool has {pool.length} game
+                      {pool.length === 1 ? "" : "s"} in it, each scored for how
+                      well it&apos;d sell next to yours.
+                    </>
+                  ) : (
+                    <>
+                      We&apos;re reviewing the first submissions now. Add your
+                      game and you&apos;ll be in the deck as soon as it&apos;s
+                      approved.
+                    </>
+                  )}
                 </p>
-                <a href="#top" className="btn btn-primary">
-                  Join free to keep swiping
+                <a href="#signin" className="btn btn-primary">
+                  {pool.length > 0
+                    ? "Join free to keep swiping"
+                    : "Add your game"}
                 </a>
               </div>
             }

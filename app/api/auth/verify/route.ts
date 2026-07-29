@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { verifyToken } from "@/lib/authTokens";
+import { startSession } from "@/lib/serverSession";
+import { dbConfigured } from "@/lib/db";
 
 /**
- * Passwordless sign-in, step 2: verify the link and hand back the email.
+ * Passwordless sign-in, step 2: verify the link and start the session.
  *
- * A real implementation would set an httpOnly session cookie here instead of
- * returning the address — see lib/session.ts for why this one doesn't.
+ * Sets a signed httpOnly cookie via startSession(), which also creates the
+ * user row. The email is still returned so the client can show who signed in.
  */
 
 export async function POST(request: Request) {
@@ -27,6 +29,21 @@ export async function POST(request: Request) {
       { error: "That link is invalid or has expired. Request a new one." },
       { status: 400 }
     );
+  }
+
+  // Set the real httpOnly session cookie and create the user row. Falls back to
+  // returning just the email when there's no database yet, so the demo flow
+  // still works before Postgres is provisioned.
+  if (dbConfigured) {
+    try {
+      await startSession(email);
+    } catch (err) {
+      console.error("[auth] Could not start session:", err);
+      return NextResponse.json(
+        { error: "Could not sign you in. Please try again." },
+        { status: 500 }
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, email });
