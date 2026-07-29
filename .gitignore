@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Committed on purpose: documents the required vars, holds no secrets.
+# (gitignore has no trailing comments — this must sit on its own line.)
+!.env.example
 
 # vercel
 .vercel

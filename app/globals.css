@@ -1,26 +1,424 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   Bundly design tokens
+   ========================================================================== */
+@theme {
+  --color-ink: #0a0a0a;
+  --color-ink-raise: #0e0e10;
+  --color-card: #111113;
+  --color-card-2: #151518;
+  --color-line: #232326;
+  --color-line-soft: #1b1b1e;
+
+  --color-muted: #9ca3af;
+  --color-muted-dim: #6b7280;
+
+  /* Softer, warmer amber than the reference's #f5a623 — less acidic against
+     the near-black, and easier on the eye at large fills like the CTA. */
+  --color-brand: #f0b15c;
+  --color-brand-hi: #f8c079;
+  /* Ink used on top of --color-brand. Kept very dark for contrast. */
+  --color-on-brand: #1a1206;
+  --color-purple: #a855f7;
+  --color-cyan: #22d3ee;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+
+  --font-display: var(--font-archivo), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: var(--font-rubik), -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ==========================================================================
+   Base
+   ========================================================================== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    background: var(--color-ink);
+    color: #fff;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: var(--color-on-brand);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ==========================================================================
+   Components
+   ========================================================================== */
+@layer components {
+  /* ---- Type scale ---- */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(2.4rem, 4.8vw, 4.4rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(1.75rem, 3vw, 2.6rem);
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .lead {
+    font-size: clamp(1rem, 1.3vw, 1.19rem);
+    color: var(--color-muted);
+    line-height: 1.6;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.78rem 1.6rem;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+      transform 0.1s ease;
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--color-brand);
+    border-color: var(--color-brand);
+    color: var(--color-on-brand);
+    font-weight: 600;
+    /* Hairline of light along the top edge plus a soft coloured drop —
+       reads as a raised surface instead of a flat colour swatch. */
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.28),
+      0 6px 16px -8px rgb(240 177 92 / 0.55);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-hi);
+    border-color: var(--color-brand-hi);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.35),
+      0 8px 20px -8px rgb(240 177 92 / 0.7);
+  }
+  .btn-primary:active:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.2),
+      0 3px 10px -8px rgb(240 177 92 / 0.5);
+  }
+
+  .btn-ghost {
+    background: var(--color-card-2);
+    border-color: var(--color-line);
+    color: #fff;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: #1d1d21;
+    border-color: #33333a;
+  }
+
+  .btn-outline-brand {
+    background: transparent;
+    border-color: rgb(240 177 92 / 0.5);
+    color: var(--color-brand);
+  }
+  .btn-outline-brand:hover:not(:disabled) {
+    background: rgb(240 177 92 / 0.12);
+    border-color: var(--color-brand);
+  }
+
+  .btn-lg {
+    padding: 0.95rem 1.6rem;
+    font-size: 16.5px;
+  }
+  /* Header-sized: the nav bar shouldn't carry a full-size CTA. */
+  .btn-sm {
+    padding: 0.58rem 1.2rem;
+    font-size: 14.5px;
+    border-radius: 10px;
+  }
+
+  /* ---- Lobby button ----
+     Outlined by default; a purple gradient wipes in from the left on hover,
+     with a neon glow. isolation:isolate keeps the ::before fill inside this
+     element's stacking context so it can sit behind the label safely. */
+  .btn-lobby {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1.5px solid rgb(168 85 247 / 0.75);
+    background: transparent;
+    color: var(--color-purple);
+    font-weight: 600;
+    transition: color 0.25s ease, border-color 0.25s ease,
+      box-shadow 0.3s ease, transform 0.1s ease;
+  }
+  .btn-lobby::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(90deg, #7c3aed 0%, #a855f7 55%, #d946ef 100%);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .btn-lobby:hover {
+    color: #fff;
+    border-color: #d8b4fe;
+    box-shadow: 0 0 0 1px rgb(216 180 254 / 0.3),
+      0 10px 30px -8px rgb(168 85 247 / 0.75);
+  }
+  .btn-lobby:hover::before {
+    transform: scaleX(1);
+  }
+  .btn-lobby:active {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 1px rgb(216 180 254 / 0.45),
+      0 5px 16px -8px rgb(168 85 247 / 0.9);
+  }
+  /* Current page: keep it filled and lit. */
+  .btn-lobby[aria-current="page"] {
+    color: #fff;
+    border-color: #c084fc;
+    box-shadow: 0 8px 24px -10px rgb(168 85 247 / 0.7);
+  }
+  .btn-lobby[aria-current="page"]::before {
+    transform: scaleX(1);
+  }
+
+  /* ---- Surfaces ---- */
+  .card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+  }
+
+  /* ---- Forms ---- */
+  .input,
+  .textarea {
+    width: 100%;
+    background: var(--color-card-2);
+    border: 1px solid var(--color-line);
+    border-radius: 9px;
+    padding: 0.8rem 0.95rem;
+    color: #fff;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .input::placeholder,
+  .textarea::placeholder {
+    color: #5b5b63;
+  }
+  .input:focus,
+  .textarea:focus {
+    outline: none;
+    border-color: var(--color-brand);
+    background: #1a1a1e;
+  }
+  .input[aria-invalid="true"],
+  .textarea[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+  .textarea {
+    min-height: 118px;
+    resize: vertical;
+  }
+
+  /* ---- Placeholder Steam capsule art ---- */
+  .art {
+    position: relative;
+    container-type: inline-size;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    padding: 0.5rem;
+  }
+  .art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      circle at 30% 20%,
+      rgb(255 255 255 / 0.13),
+      transparent 55%
+    );
+  }
+  .art > span {
+    position: relative;
+    z-index: 1;
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.05;
+    font-size: clamp(10px, 7cqi, 30px);
+    text-shadow: 0 2px 10px rgb(0 0 0 / 0.55);
+  }
+
+  /* ---- Swipe deck ---- */
+  .deck {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  /* Shared look. The live card sits in normal flow so the deck's height
+     follows its content; the card behind is layered underneath it. */
+  .card-surface {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 18px 40px rgb(0 0 0 / 0.5);
+    cursor: grab;
+    will-change: transform;
+  }
+  .card-surface[data-dragging="true"] {
+    cursor: grabbing;
+  }
+  .swipe-card-behind {
+    position: absolute;
+    inset: 0;
+  }
+
+  .stamp {
+    position: absolute;
+    top: 1.25rem;
+    z-index: 4;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 26px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 4px solid currentColor;
+    border-radius: 8px;
+    padding: 0.2rem 0.85rem;
+    pointer-events: none;
+  }
+
+  .round-btn {
+    display: grid;
+    place-items: center;
+    border-radius: 9999px;
+    border: 1.5px solid currentColor;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+  .round-btn:active:not(:disabled) {
+    transform: scale(0.93);
+  }
+  .round-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* ---- Catalog marquee ----
+     Two identical groups sit side by side and the track slides exactly one
+     group's width. Each group carries its own trailing gap via padding-right,
+     so both groups measure the same and -50% lands seamlessly on the copy. */
+  .marquee {
+    overflow: hidden;
+  }
+  .marquee__track {
+    display: flex;
+    width: max-content;
+    animation: marquee-scroll var(--marquee-duration, 55s) linear infinite;
+  }
+  .marquee__track--reverse {
+    animation-direction: reverse;
+  }
+  /* One variable drives the gap between cards AND the trailing gap that makes
+     the two copies equal width, so they can never drift out of sync. */
+  .marquee__group {
+    display: flex;
+    gap: var(--marquee-gap, 1rem);
+    padding-right: var(--marquee-gap, 1rem);
+  }
+  /* Deliberately keeps scrolling under the cursor — pausing on hover made the
+     rows feel like they'd snagged. */
+
+  @keyframes marquee-scroll {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* ---- Misc ---- */
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a30 transparent;
+  }
+  .thin-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  .thin-scroll::-webkit-scrollbar-thumb {
+    background: #2a2a30;
+    border-radius: 8px;
+  }
+
+  .clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+
+  /* The blanket rule above would snap the marquee to the middle of its loop.
+     Stop it outright and let the row be scrolled by hand instead. */
+  .marquee__track {
+    animation: none !important;
+    transform: none !important;
+  }
+  .marquee {
+    overflow-x: auto;
+  }
 }
