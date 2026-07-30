@@ -65,30 +65,37 @@ export default async function HomePage() {
           )}
           <div className="mt-4 flex flex-wrap justify-center gap-5">
             {recentMatches.map(([a, b]) => (
-              <div key={`${a.id}-${b.id}`} className="card p-3.5">
+              <div
+                key={`${a.id}-${b.id}`}
+                /*
+                 * Fluid, not fixed. Each pair fills the row on a phone and caps
+                 * at 520px on wider screens. Fixed capsule widths meant the card
+                 * was wider than a 320px viewport could hold.
+                 */
+                className="card w-full max-w-[520px] p-2.5 sm:p-3.5"
+              >
                 <div className="relative flex items-center">
-                  {/* Capsules step down on narrow screens so a pair never
-                      overflows its card. */}
+                  {/* min-w-0 so the flex children can actually shrink. */}
                   <Art
                     name={a.name}
                     src={a.capsule}
                     eager
-                    className="w-[130px] rounded-md sm:w-[200px] lg:w-[248px]"
+                    className="min-w-0 flex-1 rounded-md"
                   />
                   {/* An icon rather than the "×" character: the glyph's ink
                       sits off-centre in its em box, so it never looks centred
                       inside the circle. */}
-                  <span className="absolute left-1/2 top-1/2 z-[2] grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-card bg-brand text-on-brand">
-                    <Icon name="x" size={16} strokeWidth={3.5} />
+                  <span className="absolute left-1/2 top-1/2 z-[2] grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-card bg-brand text-on-brand sm:h-9 sm:w-9 sm:border-4">
+                    <Icon name="x" size={14} strokeWidth={3.5} />
                   </span>
                   <Art
                     name={b.name}
                     src={b.capsule}
                     eager
-                    className="w-[130px] rounded-md sm:w-[200px] lg:w-[248px]"
+                    className="min-w-0 flex-1 rounded-md"
                   />
                 </div>
-                <p className="mt-3 text-center text-[15px] text-muted">
+                <p className="mt-2.5 text-center text-[13.5px] text-muted sm:text-[15px]">
                   {a.name} <span className="font-bold text-brand">×</span>{" "}
                   {b.name}
                 </p>

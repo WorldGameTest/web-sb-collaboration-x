@@ -15,6 +15,12 @@ const COMMIT_THRESHOLD = 110;
  * throw — the card is invisible well before it would reach the edge.
  */
 const EXIT_DISTANCE = 150;
+/**
+ * Furthest the card can be dragged from centre. Enough to feel free, small
+ * enough that the card never reaches the viewport edge on a narrow phone.
+ */
+const MAX_DRAG_PX = 130;
+
 /** Must match the CSS transition below. */
 const EXIT_MS = 260;
 
@@ -89,9 +95,17 @@ export function SwipeDeck({
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!dragging || pointerRef.current !== e.pointerId) return;
+
+    // Clamp the travel. Unbounded, a right-drag pushes the card past the
+    // viewport edge, which extends the page's scrollable width and lets the
+    // whole layout be dragged sideways. Left-drags don't do this because
+    // browsers don't create negative scroll — hence the one-sided symptom.
+    const raw = e.clientX - startRef.current.x;
+    const limit = MAX_DRAG_PX;
+
     setDrag({
-      x: e.clientX - startRef.current.x,
-      y: e.clientY - startRef.current.y,
+      x: Math.max(-limit, Math.min(limit, raw)),
+      y: Math.max(-60, Math.min(60, e.clientY - startRef.current.y)),
     });
   }
 

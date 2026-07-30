@@ -37,6 +37,22 @@
     scroll-behavior: smooth;
   }
 
+  /*
+   * Nothing may scroll the page sideways.
+   *
+   * `clip` rather than `hidden` on purpose: `hidden` creates a scroll container,
+   * which breaks the sticky header (sticky stops tracking the viewport once an
+   * ancestor scrolls). `clip` suppresses the scroll without that side effect.
+   *
+   * This is the backstop for transformed elements — a dragged swipe card or the
+   * tilted hero collage extends the scrollable area even when nothing is
+   * actually laid out too wide.
+   */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
   body {
     background: var(--color-ink);
     color: #fff;
@@ -75,10 +91,14 @@
   .display {
     font-family: var(--font-display);
     font-weight: 800;
-    font-size: clamp(2.4rem, 4.8vw, 4.4rem);
+    /* Floor is 1.85rem, not 2.4rem: at 320px the old minimum made a long word
+       like MATCHMAKING wider than the column, so it was cut off. */
+    font-size: clamp(1.85rem, 6.5vw, 4.4rem);
     line-height: 1.06;
     letter-spacing: -0.02em;
     text-transform: uppercase;
+    /* Last resort for a single unbreakable word on a very narrow screen. */
+    overflow-wrap: break-word;
   }
 
   .section-title {
@@ -294,7 +314,13 @@
 
   /* ---- Swipe deck ---- */
   .deck {
-    touch-action: none;
+    /*
+     * pan-y, not none. `none` captured every gesture, so on a phone you
+     * couldn't scroll past the deck by dragging on the card — the page just
+     * froze under your finger. This keeps vertical scrolling with the browser
+     * and leaves horizontal movement to the swipe.
+     */
+    touch-action: pan-y;
     user-select: none;
     -webkit-user-select: none;
   }
