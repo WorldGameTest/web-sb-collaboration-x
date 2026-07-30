@@ -250,6 +250,35 @@ export async function listMatches(userId: number): Promise<MatchRow[]> {
   `) as MatchRow[];
 }
 
+/**
+ * How other developers have reacted to a set of games.
+ *
+ * Powers the real per-game counters in My Games — these used to be hardcoded,
+ * so every user saw the same invented numbers.
+ */
+export async function getGameStats(
+  gameIds: string[]
+): Promise<Map<string, { swipes: number; likes: number }>> {
+  const out = new Map<string, { swipes: number; likes: number }>();
+  if (gameIds.length === 0) return out;
+
+  await ensureSchema();
+  const rows = (await db()`
+    select
+      target_game_id,
+      count(*)::int                                          as swipes,
+      count(*) filter (where direction = 'like')::int         as likes
+    from swipes
+    where target_game_id = any(${gameIds})
+    group by target_game_id
+  `) as { target_game_id: string; swipes: number; likes: number }[];
+
+  for (const r of rows) {
+    out.set(r.target_game_id, { swipes: r.swipes, likes: r.likes });
+  }
+  return out;
+}
+
 /** Game ids this user has already swiped, so the deck doesn't repeat them. */
 export async function listSwipedGameIds(userId: number): Promise<string[]> {
   await ensureSchema();

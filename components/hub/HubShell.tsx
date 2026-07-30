@@ -7,7 +7,7 @@ import { Art } from "@/components/Art";
 import { SwipeDeck, type SwipeDirection } from "@/components/SwipeDeck";
 import { Icon } from "@/lib/icons";
 import { clearSession, readSession } from "@/lib/session";
-import { SEED_MY_GAMES, type Game, type MyGame } from "@/lib/data";
+import type { Game, MyGame } from "@/lib/data";
 import { HubSidebar, type HubView } from "./HubSidebar";
 import { MyGames } from "./MyGames";
 import { Conversation } from "./Conversation";
@@ -28,14 +28,18 @@ export function HubShell({ pool }: { pool: Game[] }) {
   const [ready, setReady] = useState(false);
 
   const [view, setView] = useState<HubView>("overview");
-  const [games, setGames] = useState<MyGame[]>(SEED_MY_GAMES);
-  const [swipingAs, setSwipingAs] = useState<MyGame>(SEED_MY_GAMES[0]);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
+  /** Games added this session but not yet approved — optimistic only. */
+  const [pendingGames, setPendingGames] = useState<MyGame[]>([]);
+  const [swipingAsId, setSwipingAsId] = useState<string | null>(null);
 
   /* ---- Server-backed state ---- */
   const [serverMatches, setServerMatches] = useState<ServerMatch[]>([]);
   const [swipedIds, setSwipedIds] = useState<string[]>([]);
   const [ownedIds, setOwnedIds] = useState<string[]>([]);
+  const [gameStats, setGameStats] = useState<
+    Record<string, { swipes: number; likes: number }>
+  >({});
   const [swiped, setSwiped] = useState(0);
   const [dbReady, setDbReady] = useState<boolean | null>(null);
   const [newMatch, setNewMatch] = useState<Game | null>(null);
@@ -60,12 +64,14 @@ export function HubShell({ pool }: { pool: Game[] }) {
         matches?: ServerMatch[];
         swiped?: string[];
         owned?: string[];
+        stats?: Record<string, { swipes: number; likes: number }>;
       };
 
       setDbReady(data.dbConfigured);
       setServerMatches(data.matches ?? []);
       setSwipedIds(data.swiped ?? []);
       setOwnedIds(data.owned ?? []);
+      setGameStats(data.stats ?? {});
       setOpenMatchId((current) => current ?? data.matches?.[0]?.id ?? null);
     } catch {
       setDbReady(false);
@@ -76,7 +82,48 @@ export function HubShell({ pool }: { pool: Game[] }) {
     loadMatches();
   }, [loadMatches]);
 
+  /**
+   * My Games, derived from the sheet: the approved pool entries whose owner
+   * email is this user, plus anything added this session that hasn't been
+   * approved yet. Nothing is invented — a brand-new user sees an empty list
+   * and a 0/4 checklist, which is the whole point.
+   */
+  const games: MyGame[] = useMemo(() => {
+    const approved: MyGame[] = ownedIds
+      .map((id) => pool.find((g) => g.id === id))
+      .filter((g): g is Game => Boolean(g))
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        genres: g.genres,
+        price: g.price,
+        score: g.score,
+        reviews: g.reviews,
+        positive: g.positive,
+        status: "in_pool" as const,
+        swipes: gameStats[g.id]?.swipes ?? 0,
+        likes: gameStats[g.id]?.likes ?? 0,
+        matches: serverMatches.filter((m) => m.my_game_id === g.id).length,
+      }));
+
+    // Drop optimistic rows once the real approved entry shows up.
+    const stillPending = pendingGames.filter(
+      (p) => !approved.some((a) => a.id === p.id)
+    );
+    return [...approved, ...stillPending];
+  }, [ownedIds, pool, gameStats, serverMatches, pendingGames]);
+
   const poolCount = games.filter((g) => g.status === "in_pool").length;
+  // Explicitly nullable: a brand-new user owns nothing, and games[0] is typed
+  // non-nullable without noUncheckedIndexedAccess, so TS would otherwise let
+  // swipingAs.name through and crash at runtime.
+  const swipingAs: MyGame | null =
+    games.find((g) => g.id === swipingAsId) ??
+    games.find((g) => g.status === "in_pool") ??
+    (games.length > 0 ? games[0] : null);
+
+  /** Label for the 'my side' of a conversation when no game is selected. */
+  const myLabel = swipingAs?.name ?? "Your studio";
 
   /** Look up a pool game by the id the server stores. */
   const gameById = useMemo(
@@ -147,10 +194,10 @@ export function HubShell({ pool }: { pool: Game[] }) {
   }
 
   function addGame(appId: string) {
-    setGames((list) => [
+    setPendingGames((list) => [
       ...list,
       {
-        id: `mine-${appId}`,
+        id: `s${appId}`,
         name: `Steam app ${appId}`,
         genres: ["Pending Steam sync"],
         price: "—",
@@ -292,7 +339,7 @@ export function HubShell({ pool }: { pool: Game[] }) {
                 {openMatch ? (
                   <Conversation
                     matchId={openMatch.id}
-                    mine={swipingAs.name}
+                    mine={myLabel}
                     theirs={
                       (openMatch.their_game_id &&
                         gameById.get(openMatch.their_game_id)?.name) ||
@@ -313,11 +360,14 @@ export function HubShell({ pool }: { pool: Game[] }) {
               <MyGames
                 games={games}
                 onAdd={addGame}
+                // Only a not-yet-approved row can be dropped here. An
+                // approved game lives in the sheet — taking it down means
+                // setting Status = Hidden, which the browser can't do.
                 onRemove={(id) =>
-                  setGames((list) => list.filter((g) => g.id !== id))
+                  setPendingGames((list) => list.filter((g) => g.id !== id))
                 }
                 onSwipeAs={(game) => {
-                  setSwipingAs(game);
+                  setSwipingAsId(game.id);
                   setView("swipe");
                 }}
               />
@@ -326,11 +376,22 @@ export function HubShell({ pool }: { pool: Game[] }) {
             {view === "swipe" && (
               <div className="text-center">
                 <h2 className="font-sans text-2xl font-bold tracking-normal">
-                  Swiping as {swipingAs.name}
+                  {swipingAs
+                    ? `Swiping as ${swipingAs.name}`
+                    : "Swipe the pool"}
                 </h2>
                 <p className="mt-1 text-muted">
-                  Like the games you&apos;d bundle with. Nobody sees your choices
-                  until it&apos;s mutual.
+                  {swipingAs ? (
+                    <>
+                      Like the games you&apos;d bundle with. Nobody sees your
+                      choices until it&apos;s mutual.
+                    </>
+                  ) : (
+                    <>
+                      Have a look around. Add your own game first and a like can
+                      turn into a match.
+                    </>
+                  )}
                 </p>
 
                 <SwipeDeck
@@ -380,7 +441,7 @@ export function HubShell({ pool }: { pool: Game[] }) {
                 {openMatch ? (
                   <Conversation
                     matchId={openMatch.id}
-                    mine={swipingAs.name}
+                    mine={myLabel}
                     theirs={
                       (openMatch.their_game_id &&
                         gameById.get(openMatch.their_game_id)?.name) ||
@@ -476,12 +537,12 @@ export function HubShell({ pool }: { pool: Game[] }) {
               It&apos;s a <span className="text-brand">match!</span>
             </h2>
             <p className="mb-6 text-muted">
-              {swipingAs.name} × {newMatch.name}. You both liked each other —
+              {myLabel} × {newMatch.name}. You both liked each other —
               their contact details are in your matches now.
             </p>
 
             <div className="mb-6 flex gap-2.5">
-              <Art name={swipingAs.name} className="flex-1 rounded-md" />
+              <Art name={myLabel} className="flex-1 rounded-md" />
               <Art name={newMatch.name} className="flex-1 rounded-md" />
             </div>
 

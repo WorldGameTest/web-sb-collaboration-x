@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/serverSession";
-import { dbConfigured, listMatches, listSwipedGameIds } from "@/lib/db";
+import {
+  dbConfigured,
+  getGameStats,
+  listMatches,
+  listSwipedGameIds,
+} from "@/lib/db";
 import { getGameOwners } from "@/lib/sheet";
 
 /**
@@ -35,6 +40,9 @@ export async function GET() {
     .filter(([, email]) => email === auth.user.email)
     .map(([gameId]) => gameId);
 
+  // Real reaction counts for the user's own games.
+  const stats = await getGameStats(owned);
+
   return NextResponse.json({
     ok: true,
     dbConfigured: true,
@@ -42,5 +50,6 @@ export async function GET() {
     matches,
     swiped,
     owned,
+    stats: Object.fromEntries(stats),
   });
 }

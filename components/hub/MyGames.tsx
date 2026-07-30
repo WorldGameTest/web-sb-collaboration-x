@@ -152,11 +152,15 @@ export function MyGames({
                 <IconAction label="Copy link" icon="link" />
                 <IconAction label="Refresh from Steam" icon="refresh" />
                 <IconAction label="Open on Steam" icon="external" />
-                <IconAction
-                  label={`Delete ${game.name}`}
-                  icon="trash"
-                  onClick={() => onRemove(game.id)}
-                />
+                {/* Approved games live in the sheet — removing one means
+                    setting Status = Hidden there, not deleting it here. */}
+                {game.status !== "in_pool" && (
+                  <IconAction
+                    label={`Remove ${game.name}`}
+                    icon="trash"
+                    onClick={() => onRemove(game.id)}
+                  />
+                )}
               </div>
             </div>
           ))}

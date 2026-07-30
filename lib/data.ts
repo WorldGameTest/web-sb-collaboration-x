@@ -155,21 +155,6 @@ export const PUBLISHED: {
 /* Dev Hub seed data                                                           */
 /* -------------------------------------------------------------------------- */
 
-export const SEED_MY_GAMES: MyGame[] = [
-  {
-    id: "mine-1",
-    name: "Ant Farm Simulator",
-    genres: ["Casual", "Indie", "Simulation", "Early Access"],
-    price: "$0.99",
-    score: "Mixed",
-    reviews: "24",
-    positive: "46%",
-    status: "in_pool",
-    swipes: 2,
-    likes: 1,
-    matches: 1,
-  },
-];
 
 
 
