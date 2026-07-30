@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/serverSession";
 import { dbConfigured, recordSwipe } from "@/lib/db";
-import { getGameOwners } from "@/lib/sheet";
+import { getApprovedGames, getGameOwners } from "@/lib/sheet";
+import { sendEmailSafe } from "@/lib/email/send";
+import { matchEmail } from "@/lib/email/templates";
 
 /**
  * Records a like/pass and reports whether it completed a match.
@@ -59,6 +61,40 @@ export async function POST(request: Request) {
       targetOwnerId,
       myGameIds,
     });
+
+    // Tell both sides. A match nobody hears about is worthless — most people
+    // aren't looking at the site when the other person swipes.
+    if (result.matched && targetOwnerEmail) {
+      const games = await getApprovedGames();
+      const nameOf = (id?: string) =>
+        games.find((g) => g.id === id)?.name ?? "their game";
+      const studioOf = (id?: string) =>
+        games.find((g) => g.id === id)?.developer;
+
+      const myGameName = nameOf(myGameIds[0]);
+      const theirGameName = nameOf(targetGameId);
+
+      await Promise.all([
+        sendEmailSafe(
+          auth.user.email,
+          matchEmail({
+            yourGame: myGameName,
+            theirGame: theirGameName,
+            theirStudio: studioOf(targetGameId),
+            theirEmail: targetOwnerEmail,
+          })
+        ),
+        sendEmailSafe(
+          targetOwnerEmail,
+          matchEmail({
+            yourGame: theirGameName,
+            theirGame: myGameName,
+            theirStudio: studioOf(myGameIds[0]),
+            theirEmail: auth.user.email,
+          })
+        ),
+      ]);
+    }
 
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

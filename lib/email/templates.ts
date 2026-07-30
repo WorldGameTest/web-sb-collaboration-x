@@ -214,6 +214,59 @@ If you'd like more detail, just reply to this email.`,
   };
 }
 
+/**
+ * Sent to BOTH developers the moment a mutual like completes a match.
+ *
+ * Without this, a match only surfaces if someone happens to be looking at the
+ * site — which is the difference between a platform that works and one people
+ * forget about.
+ */
+export function matchEmail(args: {
+  yourGame: string;
+  theirGame: string;
+  theirStudio?: string;
+  theirEmail?: string;
+}): Template {
+  const partner = args.theirStudio?.trim() || args.theirGame;
+
+  return {
+    subject: `It's a match — ${args.yourGame} × ${args.theirGame}`,
+    text: `You matched with ${partner}.
+
+${args.yourGame} × ${args.theirGame}
+
+You both liked each other's games, so you can talk now.${
+      args.theirEmail ? `\n\nTheir contact: ${args.theirEmail}` : ""
+    }
+
+Open the chat in the Lobby: ${BRAND.url}/hub
+
+Matches go cold fast. The studios that ship bundles are the ones that reply the same day.`,
+    html: layout({
+      preheader: `${args.yourGame} × ${args.theirGame} — you can talk now.`,
+      heading: `It's a match`,
+      body: `
+        <p style="margin:0 0 18px;font-size:17px;color:#18181b;">
+          <strong>${esc(args.yourGame)}</strong>
+          <span style="color:${BRAND.accent};">×</span>
+          <strong>${esc(args.theirGame)}</strong>
+        </p>
+        <p style="margin:0 0 14px;">You both liked each other's games, so the chat is open and you have each other's contact details.</p>
+        ${
+          args.theirEmail
+            ? `<p style="margin:0 0 14px;padding:12px 14px;background:#fafafa;border-left:3px solid ${BRAND.accent};">
+                 <strong>${esc(partner)}</strong><br>
+                 <a href="mailto:${esc(args.theirEmail)}" style="color:#3f3f46;">${esc(args.theirEmail)}</a>
+               </p>`
+            : ""
+        }
+        <p style="margin:0;color:#71717a;">Matches go cold fast — the studios that actually ship bundles are the ones that reply the same day.</p>`,
+      ctaLabel: "Open the chat",
+      ctaUrl: `${BRAND.url}/hub`,
+    }),
+  };
+}
+
 /** Generic broadcast — new features, bundle rounds, events. */
 export function announcementEmail(args: {
   subject: string;
@@ -239,3 +292,99 @@ export function announcementEmail(args: {
     }),
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Preview registry                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every email the platform sends, with sample data, for the /dev/emails
+ * preview page. Adding a template here is how it becomes reviewable — keep
+ * this in step with the senders.
+ */
+export const EMAIL_PREVIEWS: {
+  key: string;
+  label: string;
+  when: string;
+  build: () => Template;
+}[] = [
+  {
+    key: "signin",
+    label: "Sign-in link",
+    when: "Someone enters their email on the Sign in tab",
+    build: () =>
+      signInEmail({
+        link: `${BRAND.url}/auth/verify?token=EXAMPLE`,
+        expiresInMinutes: 15,
+        intent: "signin",
+      }),
+  },
+  {
+    key: "join",
+    label: "Join confirmation link",
+    when: "Someone enters their email on the Join tab (first time)",
+    build: () =>
+      signInEmail({
+        link: `${BRAND.url}/auth/verify?token=EXAMPLE`,
+        expiresInMinutes: 15,
+        intent: "join",
+      }),
+  },
+  {
+    key: "invitation",
+    label: "Submission received + invitation",
+    when: "A game is submitted through /submit",
+    build: () => invitationEmail({ gameName: "Money Garden Simulator" }),
+  },
+  {
+    key: "approved",
+    label: "Game approved",
+    when: "You set Status = Approved in the sheet",
+    build: () => approvedEmail({ gameName: "Money Garden Simulator" }),
+  },
+  {
+    key: "rejected",
+    label: "Game rejected",
+    when: "You set Status = Rejected in the sheet",
+    build: () =>
+      rejectedEmail({
+        gameName: "Money Garden Simulator",
+        reason:
+          "The store page has no gameplay screenshots yet — resubmit once it's filled in.",
+      }),
+  },
+  {
+    key: "rejected-no-reason",
+    label: "Game rejected (no note)",
+    when: "Status = Rejected with the Reviewer Notes cell left empty",
+    build: () => rejectedEmail({ gameName: "Money Garden Simulator" }),
+  },
+  {
+    key: "match",
+    label: "It's a match",
+    when: "Two developers like each other's games — sent to both",
+    build: () =>
+      matchEmail({
+        yourGame: "Age of Clicks",
+        theirGame: "Economic Miracle",
+        theirStudio: "Strudio Company",
+        theirEmail: "dev@strudio.example",
+      }),
+  },
+  {
+    key: "announcement",
+    label: "Announcement (broadcast)",
+    when: "You POST to /api/announce",
+    build: () =>
+      announcementEmail({
+        subject: "Bundle round 3 is open",
+        heading: "Bundle round 3 is open",
+        paragraphs: [
+          "We're matching studios for a September bundle. Approved games are already in the deck.",
+          "If you've been meaning to swipe, this is the week — pairs formed now have time to build the store page before the sale.",
+        ],
+        ctaLabel: "Start swiping",
+        ctaUrl: `${BRAND.url}/hub`,
+      }),
+  },
+];
