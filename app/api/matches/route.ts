@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/serverSession";
 import { dbConfigured, listMatches, listSwipedGameIds } from "@/lib/db";
+import { getGameOwners } from "@/lib/sheet";
 
 /**
  * This user's matches, plus the game ids they've already swiped so the deck
@@ -22,10 +23,17 @@ export async function GET() {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const [matches, swiped] = await Promise.all([
+  const [matches, swiped, owners] = await Promise.all([
     listMatches(auth.user.id),
     listSwipedGameIds(auth.user.id),
+    getGameOwners(),
   ]);
+
+  // The user's own games. Safe to send — they're theirs. The deck uses this to
+  // avoid showing you your own game, which you can never match with.
+  const owned = [...owners.entries()]
+    .filter(([, email]) => email === auth.user.email)
+    .map(([gameId]) => gameId);
 
   return NextResponse.json({
     ok: true,
@@ -33,5 +41,6 @@ export async function GET() {
     me: { id: auth.user.id, email: auth.user.email },
     matches,
     swiped,
+    owned,
   });
 }

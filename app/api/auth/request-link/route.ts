@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { createToken, TOKEN_TTL_MINUTES } from "@/lib/authTokens";
 import { EMAIL_RE } from "@/lib/steam";
+import { sendEmailSafe } from "@/lib/email/send";
+import { signInEmail } from "@/lib/email/templates";
 
 /**
  * Passwordless sign-in, step 1: issue a one-time link and email it.
  *
- * There's no email provider wired up yet, so in development the link comes
- * back in the response for you to click. That must never happen in
- * production — see the guard below.
+ * Sends via Resend. In development the link is also returned in the response
+ * so you can click through without an inbox; that is disabled in production.
  */
 
 export async function POST(request: Request) {
@@ -41,26 +42,37 @@ export async function POST(request: Request) {
     );
   }
 
-  const origin = new URL(request.url).origin;
+  // SITE_URL wins over the request origin: emails must link to the canonical
+  // domain, not to whatever preview host happened to serve this request.
+  const origin = process.env.SITE_URL?.replace(/\/$/, "") ??
+    new URL(request.url).origin;
   const link = `${origin}/auth/verify?token=${token}`;
 
-  const emailProviderConfigured = Boolean(process.env.EMAIL_FROM);
+  const sent = await sendEmailSafe(
+    email,
+    signInEmail({ link, expiresInMinutes: TOKEN_TTL_MINUTES, intent })
+  );
 
-  if (emailProviderConfigured) {
-    // TODO: send via Resend / Postmark / SES.
-    // await sendSignInEmail({ to: email, link, intent });
-  } else {
-    console.warn(
-      `[auth] No email provider configured. Sign-in link for ${email}:\n  ${link}`
+  // A send failure in production means the person cannot get in at all, so say
+  // so rather than showing "check your inbox" over a silent failure.
+  const reachedInbox = sent.ok && !("skipped" in sent && sent.skipped);
+  if (!reachedInbox && process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't send your sign-in link. Please try again, or contact us if it keeps failing.",
+      },
+      { status: 502 }
     );
   }
 
-  // Always report success: telling an anonymous caller whether an address is
-  // registered would leak your user list.
+  // Always report success otherwise: telling an anonymous caller whether an
+  // address is registered would leak your user list.
   return NextResponse.json({
     ok: true,
     expiresInMinutes: TOKEN_TTL_MINUTES,
     intent,
+    emailed: reachedInbox,
     // Dev convenience only — there is no inbox to check locally.
     devLink: process.env.NODE_ENV === "production" ? undefined : link,
   });

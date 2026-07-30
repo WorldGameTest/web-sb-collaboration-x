@@ -35,6 +35,7 @@ export function HubShell({ pool }: { pool: Game[] }) {
   /* ---- Server-backed state ---- */
   const [serverMatches, setServerMatches] = useState<ServerMatch[]>([]);
   const [swipedIds, setSwipedIds] = useState<string[]>([]);
+  const [ownedIds, setOwnedIds] = useState<string[]>([]);
   const [swiped, setSwiped] = useState(0);
   const [dbReady, setDbReady] = useState<boolean | null>(null);
   const [newMatch, setNewMatch] = useState<Game | null>(null);
@@ -58,11 +59,13 @@ export function HubShell({ pool }: { pool: Game[] }) {
         dbConfigured: boolean;
         matches?: ServerMatch[];
         swiped?: string[];
+        owned?: string[];
       };
 
       setDbReady(data.dbConfigured);
       setServerMatches(data.matches ?? []);
       setSwipedIds(data.swiped ?? []);
+      setOwnedIds(data.owned ?? []);
       setOpenMatchId((current) => current ?? data.matches?.[0]?.id ?? null);
     } catch {
       setDbReady(false);
@@ -90,10 +93,17 @@ export function HubShell({ pool }: { pool: Game[] }) {
     [serverMatches, gameById]
   );
 
-  /** Deck skips anything already swiped, so cards don't repeat across sessions. */
+  /**
+   * Deck skips games you've already swiped (so cards don't repeat across
+   * sessions) and games you own — you can never match with yourself, so
+   * showing them would just be a dead card.
+   */
   const deck = useMemo(
-    () => pool.filter((g) => !swipedIds.includes(g.id)),
-    [pool, swipedIds]
+    () =>
+      pool.filter(
+        (g) => !swipedIds.includes(g.id) && !ownedIds.includes(g.id)
+      ),
+    [pool, swipedIds, ownedIds]
   );
 
   const checklist = [

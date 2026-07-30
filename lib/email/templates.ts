@@ -92,6 +92,47 @@ function layout(opts: {
 /* Templates                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The passwordless sign-in link. This is the most important email in the
+ * product — if it doesn't arrive, nobody can get in at all.
+ */
+export function signInEmail(args: {
+  link: string;
+  expiresInMinutes: number;
+  /** "join" softens the copy for a first-time visitor. */
+  intent?: "join" | "signin";
+}): Template {
+  const joining = args.intent === "join";
+  const heading = joining ? `Welcome to ${BRAND.name}` : `Your sign-in link`;
+
+  return {
+    subject: joining
+      ? `Confirm your email to join ${BRAND.name}`
+      : `Your ${BRAND.name} sign-in link`,
+    text: `${heading}
+
+Click to ${joining ? "finish joining" : "sign in"} — no password needed:
+${args.link}
+
+The link works once and expires in ${args.expiresInMinutes} minutes.
+
+If you didn't request this, you can ignore this email.`,
+    html: layout({
+      preheader: `Your link expires in ${args.expiresInMinutes} minutes.`,
+      heading,
+      body: `
+        <p style="margin:0 0 14px;">Click the button to ${
+          joining ? "finish joining" : "sign in"
+        } — there's no password to remember.</p>
+        <p style="margin:0 0 14px;color:#71717a;">The link expires in <strong>${
+          args.expiresInMinutes
+        } minutes</strong>. If you didn't request it, you can ignore this email.</p>`,
+      ctaLabel: joining ? "Finish joining" : "Sign in",
+      ctaUrl: args.link,
+    }),
+  };
+}
+
 /** Sent the moment a developer submits a game. */
 export function invitationEmail(args: {
   gameName: string;
