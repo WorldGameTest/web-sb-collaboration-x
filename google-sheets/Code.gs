@@ -19,10 +19,20 @@
 /** Must equal SHEETS_SECRET on the website. */
 const SHARED_SECRET = 'change-me';
 
-/** Your deployed site, no trailing slash. e.g. https://bundly.gg */
-const SITE_URL = 'https://bundly.example';
+/** Your deployed site, no trailing slash. */
+const SITE_URL = 'https://your-site.vercel.app';
 
 const SHEET_NAME = 'Submissions';
+
+/**
+ * The spreadsheet's id — the long string in its URL:
+ *   docs.google.com/spreadsheets/d/THIS_PART/edit
+ *
+ * Required when this script is a STANDALONE project. Leave empty only if the
+ * script was created from inside the sheet (Extensions -> Apps Script), where
+ * getActiveSpreadsheet() works on its own.
+ */
+const SPREADSHEET_ID = '';
 
 /* -------------------------------------------------------------------------- */
 /* Columns                                                                     */
@@ -53,6 +63,8 @@ const HEADERS = [
   'Steam Key',      // R  <- never sent to the public site
   'Email',          // S  <- never sent to the public site
   'Additional Info',// T
+  'Ours',           // U  <- Yes = show on the /games page
+  'Featured',       // V  <- Yes = the single top slot on /games
 ];
 
 /** Field name on the incoming JSON, per column. */
@@ -60,7 +72,7 @@ const FIELDS = [
   'timestamp', 'status', 'reviewerNotes', 'gameName', 'steamAppId', 'steamLink',
   'developer', 'publishers', 'price', 'releaseDate', 'genres', 'platforms',
   'tags', 'reviewScore', 'positive', 'capsule', 'description', 'steamKey',
-  'email', 'additionalInfo',
+  'email', 'additionalInfo', 'ours', 'featured',
 ];
 
 const COL = {};
@@ -101,9 +113,9 @@ function doPost(e) {
 /**
  * Sheet -> website: every Approved row.
  *
- * Steam Key and Email are deliberately excluded. This endpoint is reachable by
- * anyone who has the URL and the secret, so it returns only what the public
- * site actually renders.
+ * Steam Key is excluded. Email is included because matching needs to know who
+ * owns each game — the website keeps it server-side and never sends it to the
+ * browser. The secret gates this endpoint.
  */
 function doGet(e) {
   try {
@@ -140,6 +152,11 @@ function doGet(e) {
         positive:    String(r[COL['Positive %'] - 1] || ''),
         capsule:     String(r[COL['Capsule URL'] - 1] || ''),
         description: String(r[COL['Description'] - 1] || ''),
+        // Owner email: needed server-side to work out who matched with whom.
+        // The website never forwards this to the browser.
+        ownerEmail:  String(r[COL['Email'] - 1] || ''),
+        ours:        String(r[COL['Ours'] - 1] || ''),
+        featured:    String(r[COL['Featured'] - 1] || ''),
       });
     }
 
@@ -210,13 +227,34 @@ function notifySite(payload) {
 /* One-time setup — run these manually from the editor                         */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Resolves the spreadsheet whether this script is bound to it or standalone.
+ *
+ * getActiveSpreadsheet() returns null in a standalone project, which surfaces
+ * as "Cannot read properties of null" — so fall back to opening by id.
+ */
+function getSpreadsheet() {
+  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+
+  throw new Error(
+    'No spreadsheet found. This script is standalone, so set SPREADSHEET_ID ' +
+      'at the top of Code.gs to the id in your sheet URL ' +
+      '(docs.google.com/spreadsheets/d/THIS_PART/edit).'
+  );
+}
+
 /** Builds the sheet layout: headers, freezing, widths, banding, validation. */
 function initialiseSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
   setupSheet(sheet);
-  SpreadsheetApp.getUi().alert('Sheet ready. Now run installTriggers().');
+  // console.log, not getUi().alert — a standalone script has no UI context
+  // and alert() would throw after the work has already succeeded.
+  console.log('Sheet ready: \'' + SHEET_NAME + '\' built. Now run installTriggers().');
 }
 
 /**
@@ -233,11 +271,11 @@ function installTriggers() {
   }
 
   ScriptApp.newTrigger('onStatusEdit')
-    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .forSpreadsheet(getSpreadsheet())
     .onEdit()
     .create();
 
-  SpreadsheetApp.getUi().alert('Status trigger installed.');
+  console.log('Status trigger installed on ' + SHEET_NAME + '.');
 }
 
 /** Sends a test payload so you can confirm the site is reachable. */
@@ -249,7 +287,7 @@ function testSiteConnection() {
     gameName: 'Connection test',
     email: '',
   });
-  SpreadsheetApp.getUi().alert('Sent. Check the Apps Script execution log.');
+  console.log('Test payload sent to ' + SITE_URL + '/api/sheet-hook');
 }
 
 function setupSheet(sheet) {
@@ -268,11 +306,18 @@ function setupSheet(sheet) {
   const widths = [
     160, 120, 260, 200, 100, 280, 160, 180, 90, 120,
     200, 140, 260, 150, 90, 320, 340, 200, 220, 300,
+    80, 90, // Ours, Featured
   ];
   widths.forEach(function (w, i) { sheet.setColumnWidth(i + 1, w); });
 
   const body = sheet.getRange(2, 1, Math.max(sheet.getMaxRows() - 1, 1), HEADERS.length);
   body.setVerticalAlignment('top');
+
+  // Clear existing banding first. applyRowBanding() throws if the range is
+  // already banded, so without this the function can only ever run once — and
+  // it needs re-running whenever columns are added.
+  const bandings = sheet.getBandings();
+  for (var b = 0; b < bandings.length; b++) bandings[b].remove();
   body.applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false);
 
   applyStatusRules(sheet);
@@ -312,7 +357,7 @@ function applyStatusRules(sheet) {
 }
 
 function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
