@@ -13,10 +13,41 @@ import { neon } from "@neondatabase/serverless";
  * chatting would hit conflicts and burn the submissions pipeline's quota.
  */
 
-const url =
+const raw =
   process.env.DATABASE_URL ??
   process.env.POSTGRES_URL ??
   process.env.NEON_DATABASE_URL;
+
+/**
+ * Only accept something that actually looks like a Postgres URL.
+ *
+ * neon() throws at module load on a malformed value, which took down the whole
+ * build — a typo'd env var should cost you chat, not the entire site. A common
+ * mistake is pasting the Neon *database name* instead of the connection string.
+ */
+function validUrl(value?: string): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate) return undefined;
+
+  if (!/^postgres(ql)?:\/\//i.test(candidate)) {
+    console.error(
+      "[db] DATABASE_URL doesn't look like a Postgres connection string " +
+        "(expected postgresql://…). Chat and matching are disabled. " +
+        `Got: ${candidate.slice(0, 24)}…`
+    );
+    return undefined;
+  }
+
+  try {
+    new URL(candidate);
+    return candidate;
+  } catch {
+    console.error("[db] DATABASE_URL is not a parseable URL. Chat disabled.");
+    return undefined;
+  }
+}
+
+const url = validUrl(raw);
 
 /** True when a database is wired up. Features degrade instead of crashing. */
 export const dbConfigured = Boolean(url);

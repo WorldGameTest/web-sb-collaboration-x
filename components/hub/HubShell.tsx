@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Art } from "@/components/Art";
@@ -12,18 +12,17 @@ import { HubSidebar, type HubView } from "./HubSidebar";
 import { MyGames } from "./MyGames";
 import { Conversation } from "./Conversation";
 
+/** A match as the server reports it. */
+type ServerMatch = {
+  id: number;
+  other_user_id: number;
+  other_email: string;
+  my_game_id: string | null;
+  their_game_id: string | null;
+  created_at: string;
+};
+
 export function HubShell({ pool }: { pool: Game[] }) {
-  /** The match you already have when you arrive — never your own game. */
-  const SEED_MATCH = pool[4] ?? pool[0];
-
-  /**
-   * Games that like you back, so a match is reachable while clicking around.
-   * Picked by position, so it survives the pool changing in the sheet.
-   */
-  const MUTUAL_LIKES = new Set(
-    [1, 6, 9].map((i) => pool[i]?.id).filter(Boolean)
-  );
-
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
@@ -31,43 +30,104 @@ export function HubShell({ pool }: { pool: Game[] }) {
   const [view, setView] = useState<HubView>("overview");
   const [games, setGames] = useState<MyGame[]>(SEED_MY_GAMES);
   const [swipingAs, setSwipingAs] = useState<MyGame>(SEED_MY_GAMES[0]);
-  const [matches, setMatches] = useState<Game[]>([SEED_MATCH]);
-  const [swiped, setSwiped] = useState(0);
-  const [likesGiven, setLikesGiven] = useState(0);
-  const [newMatch, setNewMatch] = useState<Game | null>(null);
-  const [openChat, setOpenChat] = useState<Game | null>(SEED_MATCH);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
 
-  // Gate on the local session.
+  /* ---- Server-backed state ---- */
+  const [serverMatches, setServerMatches] = useState<ServerMatch[]>([]);
+  const [swipedIds, setSwipedIds] = useState<string[]>([]);
+  const [swiped, setSwiped] = useState(0);
+  const [dbReady, setDbReady] = useState<boolean | null>(null);
+  const [newMatch, setNewMatch] = useState<Game | null>(null);
+  const [openMatchId, setOpenMatchId] = useState<number | null>(null);
+
+  // Gate on the local session (display only — the API trusts the cookie).
   useEffect(() => {
     setEmail(readSession()?.email ?? null);
     setReady(true);
   }, []);
 
+  /** Pulls matches and already-swiped ids so state survives a reload. */
+  const loadMatches = useCallback(async () => {
+    try {
+      const res = await fetch("/api/matches", { cache: "no-store" });
+      if (!res.ok) {
+        setDbReady(false);
+        return;
+      }
+      const data = (await res.json()) as {
+        dbConfigured: boolean;
+        matches?: ServerMatch[];
+        swiped?: string[];
+      };
+
+      setDbReady(data.dbConfigured);
+      setServerMatches(data.matches ?? []);
+      setSwipedIds(data.swiped ?? []);
+      setOpenMatchId((current) => current ?? data.matches?.[0]?.id ?? null);
+    } catch {
+      setDbReady(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMatches();
+  }, [loadMatches]);
+
   const poolCount = games.filter((g) => g.status === "in_pool").length;
 
-  /** Deck excludes games you've already matched with. */
+  /** Look up a pool game by the id the server stores. */
+  const gameById = useMemo(
+    () => new Map(pool.map((g) => [g.id, g])),
+    [pool]
+  );
+
+  /** Matched games, resolved from the server's match rows. */
+  const matches = useMemo(
+    () =>
+      serverMatches
+        .map((m) => (m.their_game_id ? gameById.get(m.their_game_id) : undefined))
+        .filter((g): g is Game => Boolean(g)),
+    [serverMatches, gameById]
+  );
+
+  /** Deck skips anything already swiped, so cards don't repeat across sessions. */
   const deck = useMemo(
-    () => pool.filter((g) => !matches.some((m) => m.id === g.id)),
-    [matches, pool]
+    () => pool.filter((g) => !swipedIds.includes(g.id)),
+    [pool, swipedIds]
   );
 
   const checklist = [
     { label: "Add your game", done: games.length > 0 },
     { label: "Get approved by our team", done: poolCount > 0 },
     { label: "Fill in your studio profile", done: false },
-    { label: "Swipe your first games", done: swiped > 0 },
+    { label: "Swipe your first games", done: swiped > 0 || swipedIds.length > 0 },
   ];
   const doneCount = checklist.filter((c) => c.done).length;
 
-  function handleSwipe(game: Game, direction: SwipeDirection) {
-    setSwiped((n) => n + 1);
-    if (direction !== "like") return;
+  const openMatch = serverMatches.find((m) => m.id === openMatchId) ?? null;
 
-    setLikesGiven((n) => n + 1);
-    if (MUTUAL_LIKES.has(game.id)) {
-      setMatches((m) => (m.some((x) => x.id === game.id) ? m : [...m, game]));
-      setNewMatch(game);
+  /** Sends the swipe to the server; the server decides if it's a match. */
+  async function handleSwipe(game: Game, direction: SwipeDirection) {
+    setSwiped((n) => n + 1);
+    setSwipedIds((ids) => (ids.includes(game.id) ? ids : [...ids, game.id]));
+
+    try {
+      const res = await fetch("/api/swipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetGameId: game.id, direction }),
+      });
+      if (!res.ok) return;
+
+      const data = (await res.json()) as { matched?: boolean; matchId?: number };
+      if (data.matched) {
+        setNewMatch(game);
+        if (data.matchId) setOpenMatchId(data.matchId);
+        // Re-read so the match list and contact details are authoritative.
+        loadMatches();
+      }
+    } catch {
+      /* The swipe is already reflected locally; the next load reconciles. */
     }
   }
 
@@ -219,9 +279,23 @@ export function HubShell({ pool }: { pool: Game[] }) {
                   <Stat label="Games you swiped" value={swiped} last />
                 </div>
 
-                {openChat && (
-                  <Conversation mine={swipingAs.name} theirs={openChat.name} />
-                )}
+                {openMatch ? (
+                  <Conversation
+                    matchId={openMatch.id}
+                    mine={swipingAs.name}
+                    theirs={
+                      (openMatch.their_game_id &&
+                        gameById.get(openMatch.their_game_id)?.name) ||
+                      'Your match'
+                    }
+                    theirCapsule={
+                      openMatch.their_game_id
+                        ? gameById.get(openMatch.their_game_id)?.capsule
+                        : undefined
+                    }
+                    otherEmail={openMatch.other_email}
+                  />
+                ) : null}
               </>
             )}
 
@@ -276,7 +350,10 @@ export function HubShell({ pool }: { pool: Game[] }) {
                 items={matches}
                 action="Open chat"
                 onAction={(game) => {
-                  setOpenChat(game);
+                  const match = serverMatches.find(
+                    (m) => m.their_game_id === game.id
+                  );
+                  if (match) setOpenMatchId(match.id);
                   setView("overview");
                 }}
               />
@@ -290,8 +367,22 @@ export function HubShell({ pool }: { pool: Game[] }) {
                 <p className="mb-2 text-muted">
                   Every conversation from a mutual match.
                 </p>
-                {openChat ? (
-                  <Conversation mine={swipingAs.name} theirs={openChat.name} />
+                {openMatch ? (
+                  <Conversation
+                    matchId={openMatch.id}
+                    mine={swipingAs.name}
+                    theirs={
+                      (openMatch.their_game_id &&
+                        gameById.get(openMatch.their_game_id)?.name) ||
+                      'Your match'
+                    }
+                    theirCapsule={
+                      openMatch.their_game_id
+                        ? gameById.get(openMatch.their_game_id)?.capsule
+                        : undefined
+                    }
+                    otherEmail={openMatch.other_email}
+                  />
                 ) : (
                   <Empty text="No conversations yet." />
                 )}
@@ -350,7 +441,7 @@ export function HubShell({ pool }: { pool: Game[] }) {
             onView={setView}
             gameCount={games.length}
             poolCount={poolCount}
-            unread={matches.length + likesGiven > 0 ? 2 : 0}
+            unread={serverMatches.length}
             onSignOut={signOut}
             // Newest approvals sit at the bottom of the sheet.
             newInPool={pool.slice(-8).reverse()}
@@ -389,7 +480,6 @@ export function HubShell({ pool }: { pool: Game[] }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  setOpenChat(newMatch);
                   setNewMatch(null);
                   setView("overview");
                 }}

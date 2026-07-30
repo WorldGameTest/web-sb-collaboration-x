@@ -172,11 +172,6 @@ export const SEED_MY_GAMES: MyGame[] = [
 ];
 
 
-export const SEED_THREAD = [
-  { from: "them" as const, body: "Hi :)", at: "2026-07-28 10:18:20" },
-  { from: "them" as const, body: "Is 20% fine for you? I already created the bundle", at: "2026-07-28 10:22:08" },
-  { from: "me" as const, body: "Hi", at: "2026-07-28 10:25:18" },
-];
 
 /* -------------------------------------------------------------------------- */
 /* Catalog marquee — the games currently sitting in the swipe pool             */
